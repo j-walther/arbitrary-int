@@ -1,16 +1,14 @@
-use crate::{
-    common::{
-        bytes_operation_impl, from_arbitrary_int_impl, from_native_impl, impl_extract,
-        impl_num_traits, impl_schemars, impl_step, impl_sum_product,
-    },
-    traits::{sealed::Sealed, BuiltinInteger, Integer, SignedInteger},
-    TryNewError,
-};
+use crate::{common::{
+    bytes_operation_impl, from_arbitrary_int_impl, from_native_impl, impl_extract,
+    impl_num_traits, impl_schemars, impl_step, impl_sum_product,
+}, traits::{sealed::Sealed, BuiltinInteger, Integer, SignedInteger}, TryNewError};
 use core::fmt::{Binary, Debug, Display, Formatter, LowerHex, Octal, UpperHex};
 use core::ops::{
     Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign,
     Mul, MulAssign, Neg, Not, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
 };
+#[cfg(feature = "facet")]
+use facet_core::{Def, Facet, MarkerTraits, NumericType, PrimitiveType, Shape, Type, TypeParam, ValueVTable};
 
 macro_rules! impl_signed_integer_native {
     // `$const_keyword` is marked as an optional fragment here so that it can conditionally be put on the impl.
@@ -119,6 +117,46 @@ impl_signed_integer_native!((i8, u8) as const, (i16, u16) as const, (i32, u32) a
 #[derive(Copy, Clone, Eq, PartialEq, Default, Ord, PartialOrd, Hash)]
 pub struct Int<T: SignedInteger + BuiltinInteger, const BITS: usize> {
     value: T,
+}
+
+
+#[cfg(feature = "facet")]
+unsafe impl<'a, T, const BITS: usize> Facet<'a> for Int<T, BITS> where Self: Integer, T: Facet<'a> + SignedInteger + BuiltinInteger  {
+    const SHAPE: &'static Shape = &const {
+        Shape::builder_for_sized::<Self>()
+            .type_identifier("Int")
+            .ty(Type::Primitive(PrimitiveType::Numeric(NumericType::Integer {
+                signed: false
+            })))
+            .type_params(&[
+                TypeParam {
+                    name: "T",
+                    shape: || T::SHAPE,
+                },
+            ])
+            .def(Def::Scalar)
+            .build()
+    };
+    const VTABLE: &'static ValueVTable = &const {
+        ValueVTable::builder::<Self>()
+            .marker_traits(||
+                MarkerTraits::SEND
+                    .union(MarkerTraits::SYNC)
+                    .union(MarkerTraits::EQ)
+                    .union(MarkerTraits::UNPIN)
+                    .union(MarkerTraits::COPY)
+                    .union(MarkerTraits::UNWIND_SAFE)
+                    .union(MarkerTraits::REF_UNWIND_SAFE)
+            ).type_name(|f, _opts| {
+            write!(f, "i{BITS}")
+        })
+            .display(|| Some(|value, f| write!(f, "{}", value)))
+            .debug(|| Some(|value, f| write!(f, "{value:?}")))
+            .default_in_place(|| Some(|target| unsafe { target.put(Self::ZERO) }))
+            .partial_eq(|| Some(|a, b| a == b))
+            .partial_ord(|| Some(|a,b| a.partial_cmp(b)))
+            .build()
+    };
 }
 
 impl<T: SignedInteger + BuiltinInteger, const BITS: usize> Int<T, BITS> {
@@ -1935,6 +1973,7 @@ from_native_impl!(Int(i128), [i8, i16, i32, i64, i128]);
 
 use crate::common::impl_borsh;
 pub use aliases::*;
+use crate::prelude::UnsignedInteger;
 
 #[allow(non_camel_case_types)]
 #[rustfmt::skip]

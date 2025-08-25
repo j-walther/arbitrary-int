@@ -9,6 +9,8 @@ use core::ops::{
     Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign,
     Mul, MulAssign, Not, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
 };
+#[cfg(feature = "facet")]
+use facet_core::{Def, Facet, MarkerTraits, NumericType, PrimitiveType, Shape, Type, TypeParam, ValueVTable};
 
 macro_rules! impl_integer_native {
     // `$const_keyword` is marked as an optional fragment here so that it can conditionally be put on the impl.
@@ -122,6 +124,45 @@ impl_integer_native!((u8, i8) as const, (u16, i16) as const, (u32, i32) as const
 #[derive(Copy, Clone, Eq, PartialEq, Default, Ord, PartialOrd, Hash)]
 pub struct UInt<T: UnsignedInteger + BuiltinInteger, const BITS: usize> {
     value: T,
+}
+
+#[cfg(feature = "facet")]
+unsafe impl<'a, T: UnsignedInteger + BuiltinInteger, const BITS: usize> Facet<'a> for UInt<T, BITS> where Self: Integer, T: Facet<'a> + UnsignedInteger + BuiltinInteger {
+    const SHAPE: &'static Shape = &const {
+            Shape::builder_for_sized::<Self>()
+                .type_identifier("UInt")
+                .ty(Type::Primitive(PrimitiveType::Numeric(NumericType::Integer {
+                    signed: false
+                })))
+                .type_params(&[
+                    TypeParam {
+                        name: "T",
+                        shape: || T::SHAPE,
+                    },
+                ])
+                .def(Def::Scalar)
+                .build()
+    };
+    const VTABLE: &'static ValueVTable = &const {
+        ValueVTable::builder::<Self>()
+            .marker_traits(||
+                MarkerTraits::SEND
+                    .union(MarkerTraits::SYNC)
+                    .union(MarkerTraits::EQ)
+                    .union(MarkerTraits::UNPIN)
+                    .union(MarkerTraits::COPY)
+                    .union(MarkerTraits::UNWIND_SAFE)
+                    .union(MarkerTraits::REF_UNWIND_SAFE)
+            ).type_name(|f, _opts| {
+                write!(f, "u{BITS}")
+            })
+            .display(|| Some(|value, f| write!(f, "{}", value)))
+            .debug(|| Some(|value, f| write!(f, "{value:?}")))
+            .default_in_place(|| Some(|target| unsafe { target.put(Self::ZERO) }))
+            .partial_eq(|| Some(|a, b| a == b))
+            .partial_ord(|| Some(|a,b| a.partial_cmp(b)))
+            .build()
+    };
 }
 
 impl<T: UnsignedInteger + BuiltinInteger, const BITS: usize> UInt<T, BITS> {

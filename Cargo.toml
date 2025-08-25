@@ -40,6 +40,7 @@ schemars = ["dep:schemars", "std"]
 # This optimizes e.g. indexing range checks when passed in an API.
 # The downside of this feature is that it involves an unsafe call to `core::hint::assert_unchecked` during `value()`.
 hint = []
+facet = ["dep:facet-core"]
 
 [dependencies]
 num-traits = { version = "0.2.19", default-features = false, optional = true }
@@ -50,6 +51,7 @@ schemars = { version = "0.8.21", optional = true, features = ["derive"], default
 
 arbitrary = { version = "1", optional = true, default-features = false }
 quickcheck = { version = "1", optional = true, default-features = false }
+facet-core = { version = "0.28.1", optional = true }
 
 [dev-dependencies]
 serde_test = "1.0"
